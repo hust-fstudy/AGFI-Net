@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2024/12/10
-# @File: model_performance.py
-# @Author: fwb
 import torch
 from sklearn.metrics import accuracy_score
 

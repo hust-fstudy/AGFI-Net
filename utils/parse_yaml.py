@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/6/25
-# @File: parse_yaml.py
-# @Author: fwb
 import yaml
 
 

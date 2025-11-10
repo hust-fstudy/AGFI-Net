@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/3/29
-# @File: criterion.py
-# @Author: fwb
 import torch.nn as nn
 from timm.loss import LabelSmoothingCrossEntropy
 

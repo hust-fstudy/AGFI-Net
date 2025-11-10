@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/7/5
-# @File: event_filtering.py
-# @Author: fwb
 import numpy as np
 import open3d as o3d
 

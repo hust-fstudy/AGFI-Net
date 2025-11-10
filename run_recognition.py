@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/6/25
-# @File: run_recognition.py
-# @Author: fwb
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 import os.path as osp

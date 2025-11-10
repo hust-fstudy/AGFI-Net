@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/3/4
-# @File: graph_dataset.py
-# @Author: fwb
 import os.path as osp
 import glob2
 import h5py

@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/2/12
-# @File: optimizer.py
-# @Author: fwb
 import torch.optim as optim
 
 

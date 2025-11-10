@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2024/11/22
-# @File: read_file.py
-# @Author: fwb
 import numpy as np
 import os
 import struct

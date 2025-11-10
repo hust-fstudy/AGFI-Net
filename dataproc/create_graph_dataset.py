@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/3/4
-# @File: create_graph_dataset.py
-# @Author: fwb
 import os
 import os.path as osp
 import random

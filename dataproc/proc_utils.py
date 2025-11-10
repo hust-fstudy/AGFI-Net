@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/6/26
-# @File: proc_utils.py
-# @Author: fwb
 import os
 import os.path as osp
 import math

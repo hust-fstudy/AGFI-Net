@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2024/12/12
-# @File: save_results.py
-# @Author: fwb
 import os
 import os.path as osp
 import matplotlib.pyplot as plt

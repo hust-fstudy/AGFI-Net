@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time: 2025/6/27
-# @File: net.py
-# @Author: fwb
 import torch
 import torch.nn as nn
 import torch_scatter

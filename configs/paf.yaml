@@ -1,0 +1,55 @@
+# Train/Test data split.
+is_split: False
+
+# Events filtering.
+is_adaptive: True
+base_events: 2.0e+4
+every_k_points: 5
+nb_neighbors: 32
+std_ratio: 0.1
+
+# To graph.
+is_remove_graph: True
+transform: False
+gen_batch: 64
+num_workers: 0
+
+# Initialization model.
+shuffle: True
+opt_name: 'sgd'  # opts: 'adam', 'adamW', 'sgd'
+criterion_name: 'smooth'  # opts: 'smooth', 'cross'
+epochs: 250
+batch_size: 16
+lr: 5.0e-2
+weight_decay: 1.0e-4
+momentum: 0.9
+
+# Lr scheduler.
+is_lr_scheduler: True
+lr_scheduler: 'cycle'  # opts: 'cosine', 'linear', 'step', 'multistep', 'cycle'
+warmup_epochs: 20
+decay_epochs: 30
+min_lr: 5.0e-6
+warmup_lr_init: 5.0e-7
+decay_rate: 0.1
+
+# Serialization.
+in_chs: 5
+grid_size: [7, 5, 6]
+order: ['z', 'hilbert']  # opts: 'z', 'z-trans', 'hilbert', 'hilbert-trans'
+stride: [2, 2]
+
+# Encoder.
+shuffle_orders: True
+enable_rpe: False
+enable_flash: True
+upcast_attention: False
+upcast_softmax: False
+enc_depths: [2, 2, 2]
+enc_chs: [32, 128, 256]
+enc_heads: [2, 4, 8]
+enc_patches: [16, 16, 16]
+mlp_ratio: 4
+
+# Classify head.
+num_classes: 10

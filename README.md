@@ -4,6 +4,8 @@ The code will be released after the paper is published.
 
 ## Overview
 
+We propose AGFI-Net, a novel framework leveraging adaptive graph construction and multi-serialization patterns. Initially, we transform event streams into event graphs by performing adaptive downsampling and denoising to preserve the sparsity of the raw data. Then, we utilize space-filling curves (SFCs) to map unordered 3D vertices into 1D sequences, enabling structured feature learning while maintaining the benefits of spatiotemporal locality. To enhance vertex encoding, we introduce serialized attention blocks with linear positional embeddings during the feature interaction phase, effectively compensating for the lack of global context.
+
 ![Framework](./assets/Framework.svg)
 
 ## Installation

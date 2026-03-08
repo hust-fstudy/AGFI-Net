@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2025/3/4
+# @File: graph_dataset.py
+# @Author: fwb
 import os.path as osp
 import glob2
 import h5py
@@ -33,6 +37,9 @@ class GraphDataset:
             pos=coord,
             y=label
         )
+        if not self.args.is_cls:
+            idx = torch.from_numpy(np.array(graph_data_dict['idx']).astype(np.float32))
+            graph_data['idx'] = idx
         if self.args.transform:
             transform = T.Compose([
                 T.RandomScale([0.95, 0.99]),

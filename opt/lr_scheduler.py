@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2025/2/12
+# @File: lr_scheduler.py
+# @Author: fwb
 import torch
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from timm.scheduler.step_lr import StepLRScheduler

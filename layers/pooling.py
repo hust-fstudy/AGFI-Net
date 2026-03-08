@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2025/7/12
+# @File: pooling.py
+# @Author: fwb
 from addict import Dict
 import math
 import torch

@@ -1,3 +1,6 @@
+# Task
+is_cls: True
+
 # Train/Test data split.
 is_split: False
 

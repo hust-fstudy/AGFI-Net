@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2025/6/27
+# @File: net.py
+# @Author: fwb
 import torch
 import torch.nn as nn
 import torch_scatter
@@ -6,9 +10,10 @@ from functools import partial
 from layers.structure import Point
 from layers.sequential import PointModule, PointSequential
 from layers.embedding import Embedding
-from layers.pooling import SerializedPooling
-from layers.attention import SerializedAttention
-from layers.classifier import Classifier
+from layers.pooling import GraphPooling
+from layers.unpooling import GraphUnpooling
+from layers.attention import CSAttention
+from layers.heads import ClsHead, DetHead
 
 try:
     import flash_attn
@@ -58,6 +63,7 @@ class Block(PointModule):
             act_layer=nn.GELU,
             pre_norm=True,
             order_index=0,
+            cpe_indice_key=None,
             enable_rpe=False,
             enable_flash=True,
             upcast_attention=True,
@@ -73,7 +79,7 @@ class Block(PointModule):
         )
 
         self.norm1 = PointSequential(norm_layer(channels))
-        self.attn = SerializedAttention(
+        self.attn = CSAttention(
             channels=channels,
             patch_size=patch_size,
             num_heads=num_heads,
@@ -135,6 +141,10 @@ class Net(nn.Module):
                  enc_chs=(32, 64, 128, 256),
                  enc_heads=(2, 4, 8, 16),
                  enc_patches=(64, 64, 64, 64),
+                 dec_depths=(2, 2, 2),
+                 dec_chs=(32, 64, 128),
+                 dec_heads=(2, 4, 8),
+                 dec_patches=(32, 32, 32),
                  mlp_ratio=4,
                  qkv_bias=True,
                  qk_scale=None,
@@ -146,19 +156,26 @@ class Net(nn.Module):
                  enable_rpe=False,
                  enable_flash=True,
                  upcast_attention=False,
-                 upcast_softmax=False
+                 upcast_softmax=False,
+                 is_cls=True
                  ):
         super().__init__()
         self.grid_size = grid_size
         self.num_stages = len(enc_depths)
         self.order = [order] if isinstance(order, str) else order
         self.shuffle_orders = shuffle_orders
+        self.is_cls = is_cls
 
         assert self.num_stages == len(stride) + 1
         assert self.num_stages == len(enc_depths)
         assert self.num_stages == len(enc_chs)
         assert self.num_stages == len(enc_heads)
         assert self.num_stages == len(enc_patches)
+        if not is_cls:
+            assert self.num_stages == len(dec_depths) + 1
+            assert self.num_stages == len(dec_chs) + 1
+            assert self.num_stages == len(dec_heads) + 1
+            assert self.num_stages == len(dec_patches) + 1
         # Norm layers.
         bn_layer = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         ln_layer = nn.LayerNorm
@@ -183,7 +200,7 @@ class Net(nn.Module):
             enc = PointSequential()
             if s > 0:
                 enc.add(
-                    SerializedPooling(
+                    GraphPooling(
                         in_channels=enc_chs[s - 1],
                         out_channels=enc_chs[s],
                         stride=stride[s - 1],
@@ -208,6 +225,7 @@ class Net(nn.Module):
                         act_layer=act_layer,
                         pre_norm=pre_norm,
                         order_index=i % len(self.order),
+                        cpe_indice_key=f"stage{s}",
                         enable_rpe=enable_rpe,
                         enable_flash=enable_flash,
                         upcast_attention=upcast_attention,
@@ -217,22 +235,82 @@ class Net(nn.Module):
                 )
             if len(enc) != 0:
                 self.enc.add(module=enc, name=f"enc{s}")
-        self.cls = Classifier(enc_chs[-1], num_classes)
+        # Decoder.
+        dec_drop_path = [
+            x.item() for x in torch.linspace(0, drop_path, sum(dec_depths))
+        ]
+        self.dec = PointSequential()
+        dec_chs = list(dec_chs) + [enc_chs[-1]]
+        for s in reversed(range(self.num_stages - 1)):
+            dec_drop_path_ = dec_drop_path[
+                             sum(dec_depths[:s]): sum(dec_depths[: s + 1])
+                             ]
+            dec_drop_path_.reverse()
+            dec = PointSequential()
+            dec.add(
+                GraphUnpooling(
+                    in_channels=dec_chs[s + 1],
+                    skip_channels=enc_chs[s],
+                    out_channels=dec_chs[s],
+                    norm_layer=bn_layer,
+                    act_layer=act_layer,
+                ),
+                name="up",
+            )
+            for i in range(dec_depths[s]):
+                dec.add(
+                    Block(
+                        channels=dec_chs[s],
+                        num_heads=dec_heads[s],
+                        patch_size=dec_patches[s],
+                        mlp_ratio=mlp_ratio,
+                        qkv_bias=qkv_bias,
+                        qk_scale=qk_scale,
+                        attn_drop=attn_drop,
+                        proj_drop=proj_drop,
+                        drop_path=dec_drop_path_[i],
+                        norm_layer=ln_layer,
+                        act_layer=act_layer,
+                        pre_norm=pre_norm,
+                        order_index=i % len(self.order),
+                        cpe_indice_key=f"stage{s}",
+                        enable_rpe=enable_rpe,
+                        enable_flash=enable_flash,
+                        upcast_attention=upcast_attention,
+                        upcast_softmax=upcast_softmax,
+                    ),
+                    name=f"block{i}",
+                )
+            self.dec.add(module=dec, name=f"dec{s}")
+        if is_cls:
+            self.cls = ClsHead(enc_chs[-1], num_classes)
+        else:
+            self.det = DetHead(dec_chs[0], num_classes)
 
     def forward(self, data):
         data['feat'] = data.pop('x')
         data['coord'] = data.pop('pos')
         data['grid_size'] = torch.tensor(self.grid_size).to(data['feat'].device)
-        data['feat'] = torch.cat([data['feat'], data['coord']], dim=1).to(data['feat'].device)
-        point = Point(data)
-        point.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
-        point.sparsify()
-        point = self.embedding(point)
-        point = self.enc(point)
-        point.feat = torch_scatter.segment_csr(
-            src=point.feat,
-            indptr=nn.functional.pad(point.offset, (1, 0)),
-            reduce="max",
-        )
-        out = self.cls(point.feat)
+        if self.is_cls:
+            raw_t = 0
+            data['feat'] = torch.cat([data['feat'], data['coord']], dim=1).to(data['feat'].device)
+        else:
+            raw_t = data['coord'][:, 2]
+            data['coord'] = data['coord'][:, [0, 1, 3]]
+        data = Point(data)
+        data.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
+        data.sparsify()
+        data = self.embedding(data)
+        data = self.enc(data)
+        if self.is_cls:
+            data.feat = torch_scatter.segment_csr(
+                src=data.feat,
+                indptr=nn.functional.pad(data.offset, (1, 0)),
+                reduce="max",
+            )
+            out = self.cls(data.feat)
+        else:
+            data = self.dec(data)
+            out = self.det(data.feat)
+            data['coord'][:, 2] = raw_t
         return out

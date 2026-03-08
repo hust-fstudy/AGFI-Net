@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2025/3/4
+# @File: create_graph_dataset.py
+# @Author: fwb
 import os
 import os.path as osp
 import random
@@ -40,25 +44,43 @@ def batch_create(args, data_path, save_graph_dir, seed=1):
     batch_test_loader = DataLoader(batch_test_graph_dataset, batch_size=args.gen_batch, num_workers=args.num_workers)
     generate(batch_train_loader)
     generate(batch_test_loader)
+    if not args.is_cls:
+        batch_val_graph_dataset = CreateGraphDataset(args, data_path, save_graph_dir, label_dict, 'val', seed=seed)
+        batch_val_loader = DataLoader(batch_val_graph_dataset, batch_size=args.gen_batch, num_workers=args.num_workers)
+        generate(batch_val_loader)
 
 
 def create_graph_data(args, events_dict, graph_index_path):
-    # Unify the temporal scale of events to the spatial scale.
-    x_max = events_dict['x'].max().astype(np.float32)
-    y_max = events_dict['y'].max().astype(np.float32)
-    t_scale = (x_max + y_max) // 2
-    events_dict['t'] = min_max_normalization(events_dict['t'], mx=t_scale)
-    # Event filtering.
-    events_dict = adaptive(args, events_dict)
-    # Calculate graph.
-    CG = CalGraph(args, t_scale)
-    events_dict = CG(events_dict)
-    # Graph data info.
-    graph_data_dict = {
-        'feat': np.array(events_dict['feat']),
-        'coord': np.array(events_dict['coord']),
-        'label': np.array(events_dict['label'])
-    }
+    if args.is_cls:
+        # Unify the temporal scale of events to the spatial scale.
+        x_max = events_dict['x'].max().astype(np.float32)
+        y_max = events_dict['y'].max().astype(np.float32)
+        t_scale = (x_max + y_max) // 2
+        events_dict['t'] = min_max_normalization(events_dict['t'], mx=t_scale)
+        # Event filtering.
+        events_dict = adaptive(args, events_dict)
+        # Calculate graph.
+        CG = CalGraph(args, t_scale)
+        events_dict = CG(events_dict)
+        # Graph data info.
+        graph_data_dict = {
+            'feat': np.array(events_dict['feat']),
+            'coord': np.array(events_dict['coord']),
+            'label': np.array(events_dict['label'])
+        }
+    else:
+        x_max = events_dict['ev_loc'][:, 0].max().astype(np.float32)
+        y_max = events_dict['ev_loc'][:, 1].max().astype(np.float32)
+        t_scale = (x_max + y_max) // 2
+        norm_t = min_max_normalization(events_dict['ev_loc'][:, 2], mx=t_scale)
+        events_dict['ev_loc'] = np.concatenate([events_dict['ev_loc'], norm_t.reshape(-1, 1)], axis=1)
+        # Graph data info.
+        graph_data_dict = {
+            'feat': np.array(events_dict['evs_norm']),
+            'coord': np.array(events_dict['ev_loc']),
+            'label': np.array(events_dict['seg_label']),
+            'idx': np.array(events_dict['idx'])
+        }
     with h5py.File(graph_index_path, 'w') as f:
         for key, value in graph_data_dict.items():
             if isinstance(value, str):
@@ -85,15 +107,20 @@ class CreateGraphDataset(Dataset):
         self.mode_dir = osp.join(data_path, mode)
         self.save_graph_dir = osp.join(save_graph_dir, mode)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.class_list = os.listdir(self.mode_dir)
         self.sample_path_list = []
-        self.sample_label_list = []
-        for each_class in tqdm(self.class_list, desc="Read each class"):  # iterate over all classes
-            each_class_path = osp.join(self.mode_dir, each_class)
-            file_path_list = glob2.glob(osp.join(each_class_path, '*'))
-            file_label_list = np.full(len(file_path_list), self.label_dict[each_class])
+        file_path_list = []
+        if args.is_cls:
+            self.class_list = os.listdir(self.mode_dir)
+            self.sample_label_list = []
+            for each_class in tqdm(self.class_list, desc="Read each class"):  # iterate over all classes
+                each_class_path = osp.join(self.mode_dir, each_class)
+                file_path_list = glob2.glob(osp.join(each_class_path, '*'))
+                file_label_list = np.full(len(file_path_list), self.label_dict[each_class])
+                self.sample_path_list.extend(file_path_list)
+                self.sample_label_list.extend(file_label_list)
+        else:
+            file_path_list = glob2.glob(osp.join(self.mode_dir, '*'))
             self.sample_path_list.extend(file_path_list)
-            self.sample_label_list.extend(file_label_list)
         self.save_graph_names = [f"{mode}_data_{i}.hdf5" for i in range(len(self.sample_path_list))]
         create_path(self.save_graph_dir)
 
@@ -103,6 +130,8 @@ class CreateGraphDataset(Dataset):
     def __getitem__(self, index):
         graph_index_path = osp.join(self.save_graph_dir, self.save_graph_names[index])
         sample_path = self.sample_path_list[index]
+        x, y, t, p = [], [], [], []
+        evs_norm, ev_loc, seg_label, idx = [], [], [], []
         if self.dataset_name in ['dvsgesture']:
             [x, y, t, p] = self.RF.npz_file_reader(sample_path)
         elif self.dataset_name in ['thu']:
@@ -115,10 +144,20 @@ class CreateGraphDataset(Dataset):
             [x, y, t, p] = self.RF.bully_data_reader(sample_path)
         elif self.dataset_name in ['daily']:
             [x, y, t, p] = self.RF.daily_data_reader(sample_path)
+        elif self.dataset_name in ['ev-uav']:
+            [evs_norm, ev_loc, seg_label, idx] = self.RF.uav_data_reader(sample_path)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
-        sample_label = np.array(self.sample_label_list[index])
-        events_dict = Event(x, y, t, p, sample_label).to_uniform_format()
+        if self.args.is_cls:
+            sample_label = np.array(self.sample_label_list[index])
+            events_dict = Event(x, y, t, p, sample_label).to_uniform_format()
+        else:
+            events_dict = {
+                'evs_norm': evs_norm,
+                'ev_loc': ev_loc,
+                'seg_label': seg_label,
+                'idx': idx
+            }
         graph_data = create_graph_data(self.args, events_dict, graph_index_path)
         graph_data = list(graph_data)
         return graph_data

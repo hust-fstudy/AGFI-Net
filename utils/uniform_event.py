@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2024/11/22
+# @File: uniform_event.py
+# @Author: fwb
 from dataclasses import dataclass
 import numpy as np
 

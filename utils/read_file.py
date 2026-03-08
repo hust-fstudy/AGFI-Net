@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# @Time: 2024/11/22
+# @File: read_file.py
+# @Author: fwb
 import numpy as np
 import os
 import struct
@@ -212,3 +216,11 @@ class ReadFile:
         p = np.array(pol)
         p = np.where(p == 0, -1, p.astype(int))
         return [x, y, t, p]
+
+    def uav_data_reader(self, filepath):
+        events = np.load(filepath)
+        evs_norm = events['evs_norm'][:, 0:4]
+        ev_loc = events['ev_loc']
+        seg_label = events['evs_norm'][:, 4]
+        idx = events['evs_norm'][:, 5]
+        return [evs_norm, ev_loc, seg_label, idx]

@@ -1,5 +1,6 @@
 # Save path.
-data_root_dir: './dataset/'
+data_root_dir: './datasets/'
+# data_root_dir: '/data/fwb/dataset/'
 
 # Initialization.
 random_seed: 1

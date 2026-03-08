@@ -1,6 +1,6 @@
 # AGFI-Net: Adaptive Graph Feature Interaction Network for Event-Based Motion Recognition and Detection
 
-The code will be released after the paper is published.
+The complete code will be released after the paper is published.
 
 ## Overview
 
